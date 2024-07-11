@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import cv2.aruco as aruco
 
-cam_id = 0
+cam_id = 1
 
 aruco_dict_border = aruco.getPredefinedDictionary(aruco.DICT_6X6_100)
 aruco_dict_notes = aruco.getPredefinedDictionary(aruco.DICT_4X4_100)
@@ -34,6 +34,53 @@ def to_cartesian(point:np.array, origin:np.array):
     return p_relative + origin
 
 
+class Playfield():
+    """
+    Takes a paper with 4 AruCo markers and transforms the surface to 
+    fit the video frame
+    """
+
+    def __init__(self):
+        self.has_transformed = False
+        self.marker_ids = [0, 1, 2, 3]
+        self.prev_transform = []
+
+    def transform_game_field(self, ids:list[list[int]], corners, frame):
+        """
+        Uses the outer corners of the markers on the board
+        to transform the board to fit the webcam.
+        Keeps the the orientation until all expected markers have been detected.
+        Returns the transformed image.
+        """
+        
+        marker_ids = self.marker_ids # expected markers
+        ids = ids.flatten()
+        ids.sort() 
+
+        if len(ids) == 4 and (marker_ids == ids).all():
+            c = corners
+            # get the top-left corner of each marker for comparison
+            m_0 = c[ids[0]][0][0] # x/y coordinates of top-left corner
+            m_1 = c[ids[1]][0][0]
+            m_2 = c[ids[2]][0][0]
+            m_3 = c[ids[3]][0][0]
+
+            self.prev_transform = np.float32(np.array([m_0, m_1, m_3, m_2]))
+
+        # keep the transformation if not all markers have been reliably found
+        if len(self.prev_transform) > 0:
+            old_points = self.prev_transform
+            height, width, c = frame.shape
+            new_points = np.float32(np.array([ [0, 0], [width, 0], [width, height], [0, height] ]))
+
+            matrix = cv2.getPerspectiveTransform(old_points, new_points )
+            frame = cv2.warpPerspective(frame, matrix, (width, height))
+
+        return frame
+
+# Init
+playfield = Playfield()
+
 cap = cv2.VideoCapture(cam_id)
 while True:
     # Capture a frame from the webcam
@@ -48,13 +95,15 @@ while True:
 
     corners, ids, rejected = detector_notes.detectMarkers(gray)
 
-    # Check if marker is detected
+    # Check if markers for the borders are detected
     if border_ids is not None:
         # Draw lines along the sides of the marker
-        aruco.drawDetectedMarkers(frame, border_corners)
-        
-        border_markers = border_corners[np.where(border_ids in [0,1,2,3])]
-        print(border_markers)
+        aruco.drawDetectedMarkers(frame, border_corners, border_ids)
+
+        frame = playfield.transform_game_field(border_ids, border_corners, frame)
+
+        # border_markers = border_corners[np.where(border_ids in [0,1,2,3])]
+        # print(border_ids)
 
     if ids is not None:
         aruco.drawDetectedMarkers(frame, corners)
