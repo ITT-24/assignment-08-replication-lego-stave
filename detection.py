@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import cv2.aruco as aruco
 
-cam_id = 1
+cam_id = 0
 
 aruco_dict_border = aruco.getPredefinedDictionary(aruco.DICT_6X6_100)
 aruco_dict_notes = aruco.getPredefinedDictionary(aruco.DICT_4X4_100)
@@ -81,14 +81,16 @@ class Playfield():
 # Init
 playfield = Playfield()
 
-cap = cv2.VideoCapture(cam_id)
+cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
 
+    if not ret:
+        print("No frame")
+        continue
     # Convert the frame to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
     # Detect ArUco markers in the frame
     #corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
     border_corners, border_ids, border_rejectedImgPoints = detector_border.detectMarkers(gray)
@@ -100,13 +102,11 @@ while True:
         # Draw lines along the sides of the marker
         aruco.drawDetectedMarkers(frame, border_corners, border_ids)
 
-        frame = playfield.transform_game_field(border_ids, border_corners, frame)
+        #frame = playfield.transform_game_field(border_ids, border_corners, frame)
 
         # border_markers = border_corners[np.where(border_ids in [0,1,2,3])]
         # print(border_ids)
 
-    if ids is not None:
-        aruco.drawDetectedMarkers(frame, corners)
 
     # Display the frame
     cv2.imshow('frame', frame)
