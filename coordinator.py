@@ -1,7 +1,12 @@
+import threading
 import cv2
 import numpy as np
 import cv2.aruco as aruco
 import sys
+
+NOTE_DURATION_IN_SEC = 1
+GRID_COLOR = (200, 200, 200)
+TIMELINE_COLOR = (0, 0, 0)
 
 # INIT VIDEO FEED
 cam_id = 0
@@ -15,6 +20,7 @@ aruco_params = aruco.DetectorParameters()
 detector_border = aruco.ArucoDetector(aruco_dict_border,aruco_params)
 detector_notes = aruco.ArucoDetector(aruco_dict_notes, aruco_params)
 
+# ----- Helper classes ----- #
 
 class Lego:
     """A representation of a lego duplo piece standing on it's side. So smooth sides up."""
@@ -23,26 +29,16 @@ class Lego:
         self.height_mm = 31
         self.marker_mm = 16
         self.marker_size = 0
-        self.padding = 20 # leniency for align
+        self.padding = 20
+        self.padding_w = 20 # leniency for align
+        self.padding_h = 10
 
-    def get_size_from_marker(self, corners, frame):
-        """Use the known dimensions of the aruco marker to get the size of the lego pieces in pixels
-           corners = corners of the first detected marker => all same size + distance.
-           0 - 1
-           |   |
-           3 - 2   
-        """
-        rect = cv2.boundingRect(corners)
-        x,y,marker_w,marker_h = rect
-        cv2.rectangle(frame,(x,y),(x+marker_w,y+marker_h),(0,255,0),2)
-        print("max", marker_w, marker_h)
-        self.marker_size_px = (marker_w + marker_h) / 2 # get average
-
-    def set_lego_size(self, corners):
+    def set_lego_size(self, corners, frame):
         """Measure the rough size of the lego pieces in pixels in the frame. Uses the first detected lego"""
         # partially from: https://pysource.com/2021/05/28/measure-size-of-an-object-with-opencv-aruco-marker-and-python/
+        
         if self.marker_size != 0:
-            return # only set once (not for debug)
+            return # only set once
 
         int_corners = np.intp(corners)
         cv2.polylines(frame, int_corners, True, (0, 255, 0), 2) # for debug
@@ -52,11 +48,44 @@ class Lego:
 
         mm_in_px = self.marker_size / self.width_mm
 
+        # TODO: add dynamic padding, so that frame_w/h is multiple of w/h 
+        frame_h, frame_w, _ = frame.shape
 
-        # TODO: choose padding, so that frame_w/h is multiple of w/h 
+        # 640 / 45 = 14,22
+        # 45 * 14 = 630
+        # 640 - 630 = 10 -> padding / 14 = 0,714
+        # 45 + (full_padding/14)
 
-        self.width_px = int(self.width_mm * mm_in_px) + self.padding
-        self.height_px = int(self.height_mm * mm_in_px) + self.padding
+        # width = int(self.width_mm * mm_in_px)
+        # height = int(self.height_mm * mm_in_px)
+        # if width % frame_w != 0:
+        #     steps = frame_w // width
+        #     diff = frame_w - (width * steps)
+        #     self.padding_w = diff / steps
+        #     # print("w", self.padding_w, (width+self.padding_w) * steps, "=", frame_w)
+        #     # self.padding = int(frame_w * (width // frame_w))
+        #     # self.padding = width / frame_w
+        #     # print("w-round", frame_w * (width // frame_w))
+
+        # if height % frame_h != 0:
+        #     # print(height % frame_h, height / frame_h)
+        #     # self.padding = int(frame_h * (height // frame_h))
+        #     # print("h-round", frame_h * (height // frame_h))
+        #     steps_h = frame_h // height
+        #     diff = frame_h - (height * steps_h)
+        #     self.padding_h = diff / steps_h
+        #     # print("h", self.padding_h, (height+self.padding_h) * steps, "=", frame_h)
+
+        self.width_px = int( (self.width_mm * mm_in_px) + self.padding)
+        self.height_px = int ( (self.height_mm * mm_in_px) + self.padding)
+
+        # # resize to fit grid?
+        # frame = cv2.resize(frame, ( (self.width_px) * steps,  (self.height_px) * steps_h ))
+
+        # print("w", (self.width_px) * steps, "=", frame_w)
+        # print("h", (self.height_px) * steps_h, "=", frame_h)
+        # self.width_px = int(width)
+        # self.height_px = int(height)
 
         # print(f"lego == {self.width_px} x {self.height_px}")
 
@@ -68,20 +97,19 @@ class Coordinator:
         self.rows = 0
         self.cols = 0
         self.centers = []
-        pass
+        self.has_started = False
 
     # ?? do perspective projection?
     def draw_grid(self, frame):
         """see: https://stackoverflow.com/a/37705365"""
+        
         if lego.marker_size == 0:
             return # only draw after marker was successfully detected
 
         # divide the into cells using the lego size
         h, w, _ = frame.shape
         rows, cols = (h//lego.height_px, w//lego.width_px)
-        # rows, cols = (w//lego.width_px, h//lego.height_px)
 
-        color = (200, 200, 200)
         grid_x_idx = 0
         grid_y_idx = 0
 
@@ -90,19 +118,21 @@ class Coordinator:
 
         for x in range (0, w, cell_width):
             x = int(x)
-            cv2.line(frame, (x, 0), (x, h), color=color, thickness=1)
-            cv2.putText(frame, str(grid_x_idx), (x, h), cv2.FONT_HERSHEY_PLAIN, 1, color)
+            cv2.line(frame, (x, 0), (x, h), color=GRID_COLOR, thickness=1)
+            cv2.putText(frame, str(grid_x_idx), (x, h), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
             grid_x_idx += 1
 
         for y in range (0, h, cell_height):
             y = int(y)
-            cv2.line(frame, (0, y), (w, y), color=color, thickness=1)
-            cv2.putText(frame, str(grid_y_idx), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, color)
+            cv2.line(frame, (0, y), (w, y), color=GRID_COLOR, thickness=1)
+            cv2.putText(frame, str(grid_y_idx), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
             grid_y_idx += 1
 
 
         self.rows = rows
         self.cols = cols
+        self.has_started = True
+
 
     def get_marker_center(self, corners, frame):
         """Get the middle of the marker for all markers, see: https://stackoverflow.com/a/64742091"""
@@ -118,39 +148,119 @@ class Coordinator:
             cv2.circle(frame, (x_centerPixel, y_centerPixel), 5, (0, 0, 255), -1)
 
             self.centers.append((x_centerPixel, y_centerPixel)) # save centers
+        
+        # print("c's", len(self.centers))
+        # TODO: ? only re-save the centers, if the markers have moved significantly (for performance)
 
-        # TODO: only re-save the centers, if the markers have moved significantly (for performance)
 
-
-    def collision(self, frame):
-        """Detect which cell the marker is in, see: https://stackoverflow.com/a/37705365"""
-
+    def draw_collision(self, frame):
+        """Show the cell the marker is currently colliding with"""
         if self.rows == 0:
             return
-
         for center in self.centers:
             # get which cell the center is in
-            x, y = center
-            row = int( x / lego.width_px )
-            col = int( y / lego.height_px) 
+            cell = self.get_cell_of_marker_center(center)
 
-            print(f"row: {row} + col: {col}")
+    def get_cell_of_marker_center(self, center):
+        """Detect which cell the marker is in, see: https://stackoverflow.com/a/37705365"""
+        x, y = center
+        row = int( x / lego.width_px )
+        col = int( y / lego.height_px) 
+        # print(f"row: {row} + col: {col}")
 
-            x = row * lego.width_px
-            y = col * lego.height_px
-            cv2.rectangle(frame, (x, y), (x+lego.width_px, y+lego.height_px), (255, 255, 255), 2)
+        x = row * lego.width_px
+        y = col * lego.height_px
+        cv2.rectangle(frame, (x, y), (x+lego.width_px, y+lego.height_px), (255, 255, 255), 2)
+        
+        cell = Cell(row, col)
+        return cell
 
-            # cell = row * self.rows + col + 1
-            # print("cell", cell)
 
-        # check center of marker to "center of cell"
-# https://stackoverflow.com/questions/37704114/drawing-numbering-and-identifying-grid-cells-in-opencv
+class Player:
+    """Capsules the media-player aspect of the application."""
+    def __init__(self):
+        self.color = TIMELINE_COLOR
+        self.x = 0
+        self.column = 0
+        self.start = False
+        pass
+
+    def draw_timeline(self, frame):
+        if lego.marker_size == 0:
+            return 
+        
+        if coord.has_started and not self.start: 
+            # start the timer once on initialization of the grid
+            self.start_timer()
+            self.start = True
+        
+        h, w, _ = frame.shape
+
+        if self.x >= w: # reset the timeline and loop the player
+            print("out of frame", self.x, w)
+            self.x = 0 # reset
+            self.column = 0
+
+        cv2.line(frame, (self.x, 0), (self.x, h), color=self.color, thickness=2)
+
+        # uncomment if check every frame
+        # self.play_cells() # check often    
+
+    def play_cells(self):
+        """Checks the current column for markers.
+           Do this every frame, or only once per timer call
+        """
     
+        for center in coord.centers:
+            x, y = center
+
+            cell_min = lego.width_px * self.column
+            cell_max = cell_min + lego.width_px
+
+            # check if there is a marker center that aligns with column the timeline is currently at
+            if x >= cell_min and x <= cell_max:
+                cell = coord.get_cell_of_marker_center(center)
+                print("marker @", f"row:{cell.row}, col:{cell.col}")
+        
+        self.advance_timeline() # comment if check every frame
+
+    def advance_timeline(self):
+        """Gets called by a repeating threaded timer to advance the timeline (see: Looper-Class)"""
+        self.column += 1
+        self.x += lego.width_px 
+        # print("player @ col", self.column)
+    
+    def start_timer(self):
+        self.timer = Looper(NOTE_DURATION_IN_SEC, self.play_cells) # comment if check every frame
+        # self.timer = Looper(NOTE_DURATION_IN_SEC, self.advance_timeline) # uncomment if check every frame
+        self.timer.start()
+
+    def stop_timer(self):
+        self.timer.cancel()
+
+
+class Looper(threading.Timer):
+    """A threaded looping timer, based on: https://stackoverflow.com/a/48741004"""
+    def run(self):
+        while not self.finished.wait(self.interval):
+            self.function(*self.args, **self.kwargs)
+
+class Cell:
+    def __init__(self, row, col):
+        self.row = row  
+        self.col = col
+
 # ----- INIT ----- #
+
 lego = Lego()
 coord = Coordinator()
+player = Player()
+
+
+# ----- LOOP ----- #
 
 cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
+
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
@@ -168,23 +278,19 @@ while True:
     # Check if markers for the borders are detected
     if ids is not None:
         # aruco.drawDetectedMarkers(frame, corners, ids)
-
-        lego.set_lego_size(corners) 
+        lego.set_lego_size(corners, frame) 
         coord.get_marker_center(corners, frame)
-        coord.collision(frame)
-        # print(corners[0][0], "\n")
-        # lego.get_size_from_marker(corners[0][0], frame)
-        # lego.get_pixel_per_cm(corners, contours[0])
-        # TODO: detect their relative/normalized position (x, y)
-
+        coord.draw_collision(frame)
 
     coord.draw_grid(frame)
+    player.draw_timeline(frame)
 
     # Display the frame
     cv2.imshow('frame', frame)
 
     # Wait for a key press and check if it's the 'q' key
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        player.stop_timer()
         break
 
 # Release the video capture object and close all windows
