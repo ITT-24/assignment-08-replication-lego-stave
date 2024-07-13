@@ -20,18 +20,19 @@ aruco_params = aruco.DetectorParameters()
 detector_border = aruco.ArucoDetector(aruco_dict_border,aruco_params)
 detector_notes = aruco.ArucoDetector(aruco_dict_notes, aruco_params)
 
+# TODO: use angle of surface to create perspectively transformed grid
+# ??: instead of padding cells, crop the frame?
+
 # ----- Helper classes ----- #
 
 class Lego:
     """A representation of a lego duplo piece standing on it's side. So smooth sides up."""
     def __init__(self):
-        self.width_mm = 18
-        self.height_mm = 31
+        self.width_mm = 18 # actually 18 (but adds some leniency)
+        self.height_mm = 31 # actually 31 (but adds some leniency)
         self.marker_mm = 16
         self.marker_size = 0
-        self.padding = 20
-        self.padding_w = 20 # leniency for align
-        self.padding_h = 10
+        self.padding = 20 
 
     def set_lego_size(self, corners, frame):
         """Measure the rough size of the lego pieces in pixels in the frame. Uses the first detected lego"""
@@ -39,55 +40,55 @@ class Lego:
         
         if self.marker_size != 0:
             return # only set once
+        
+        if not coord.has_started:
+            return # only set once the user presses enter
 
         int_corners = np.intp(corners)
         cv2.polylines(frame, int_corners, True, (0, 255, 0), 2) # for debug
 
         aruco_perimeter = cv2.arcLength(corners[0], True)
-        self.marker_size = aruco_perimeter // 4
+        self.marker_size = int(aruco_perimeter / 4)
 
-        mm_in_px = self.marker_size / self.width_mm
+        mm_in_px = self.marker_size / self.marker_mm # set the transform value
 
-        # TODO: add dynamic padding, so that frame_w/h is multiple of w/h 
         frame_h, frame_w, _ = frame.shape
 
-        # 640 / 45 = 14,22
-        # 45 * 14 = 630
-        # 640 - 630 = 10 -> padding / 14 = 0,714
-        # 45 + (full_padding/14)
+        # get initial size
+        width_px = int(self.width_mm * mm_in_px)
+        height_px = int(self.height_mm * mm_in_px)
+        
+        # add dynamic padding to make the cells fit the frame better (works (with, but has some rounding errors))
+        # so: |[lego+padding][l+p][l+p][l+p]| not |[l+p][l+p][l+p][|
+        padding_w = 0
+        if frame_w % width_px != 0: # set a padding to fill the width of the frame
+            cells_w = int(frame_w / width_px )
+            diff_w = frame_w - (width_px * cells_w)
+            padding_w = int(diff_w / width_px)
+            print("w", cells_w * int( width_px + padding_w), "==", frame_w )
 
-        # width = int(self.width_mm * mm_in_px)
-        # height = int(self.height_mm * mm_in_px)
-        # if width % frame_w != 0:
-        #     steps = frame_w // width
-        #     diff = frame_w - (width * steps)
-        #     self.padding_w = diff / steps
-        #     # print("w", self.padding_w, (width+self.padding_w) * steps, "=", frame_w)
-        #     # self.padding = int(frame_w * (width // frame_w))
-        #     # self.padding = width / frame_w
-        #     # print("w-round", frame_w * (width // frame_w))
+        padding_h = 0
+        if frame_h % height_px != 0:
+            cells_h = int(frame_h / height_px)
+            print("cells", cells_h)
+            diff_h = frame_h - (height_px * cells_h)
+            print("diff", diff_h)
+            padding_h = int(diff_h / cells_h)
+            print("padding", padding_h)
+            print("h", cells_h * ( height_px + padding_h), "==", frame_h )
 
-        # if height % frame_h != 0:
-        #     # print(height % frame_h, height / frame_h)
-        #     # self.padding = int(frame_h * (height // frame_h))
-        #     # print("h-round", frame_h * (height // frame_h))
-        #     steps_h = frame_h // height
-        #     diff = frame_h - (height * steps_h)
-        #     self.padding_h = diff / steps_h
-        #     # print("h", self.padding_h, (height+self.padding_h) * steps, "=", frame_h)
+        # rounding for cv2 functions
+        self.width_px = int( width_px + padding_w )
+        self.height_px = int( height_px + padding_h )
 
-        self.width_px = int( (self.width_mm * mm_in_px) + self.padding)
-        self.height_px = int ( (self.height_mm * mm_in_px) + self.padding)
+        # uncomment to do static padding
+        # self.width_px = int( (self.width_mm * mm_in_px) + self.padding)
+        # self.height_px = int ( (self.height_mm * mm_in_px) + self.padding)
 
         # # resize to fit grid?
-        # frame = cv2.resize(frame, ( (self.width_px) * steps,  (self.height_px) * steps_h ))
+        # #  frame = cv2.resize(frame, ( (self.width_px) * steps,  (self.height_px) * steps_h ))
 
-        # print("w", (self.width_px) * steps, "=", frame_w)
-        # print("h", (self.height_px) * steps_h, "=", frame_h)
-        # self.width_px = int(width)
-        # self.height_px = int(height)
-
-        # print(f"lego == {self.width_px} x {self.height_px}")
+        print(f"lego == {self.width_px} x {self.height_px}")
 
 
 class Coordinator:
@@ -105,6 +106,8 @@ class Coordinator:
         
         if lego.marker_size == 0:
             return # only draw after marker was successfully detected
+        if not self.has_started:
+            return 
 
         # divide the into cells using the lego size
         h, w, _ = frame.shape
@@ -127,7 +130,6 @@ class Coordinator:
             cv2.line(frame, (0, y), (w, y), color=GRID_COLOR, thickness=1)
             cv2.putText(frame, str(grid_y_idx), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
             grid_y_idx += 1
-
 
         self.rows = rows
         self.cols = cols
@@ -183,6 +185,8 @@ class Player:
         self.x = 0
         self.column = 0
         self.start = False
+        self.is_paused = True
+        self.timer = None
         pass
 
     def draw_timeline(self, frame):
@@ -234,9 +238,24 @@ class Player:
         self.timer = Looper(NOTE_DURATION_IN_SEC, self.play_cells) # comment if check every frame
         # self.timer = Looper(NOTE_DURATION_IN_SEC, self.advance_timeline) # uncomment if check every frame
         self.timer.start()
+        self.is_paused = False
 
     def stop_timer(self):
         self.timer.cancel()
+
+    def on_pause(self):
+        if self.timer == None:
+            text = "No grid initiated yet. Press Enter and put a marker below the camera."
+            print(text)
+        else: 
+            if self.is_paused:
+                print("play")
+                self.start_timer()
+                self.is_paused = False
+            else:
+                print("pause")
+                self.stop_timer()
+                self.is_paused = True
 
 
 class Looper(threading.Timer):
@@ -255,7 +274,6 @@ class Cell:
 lego = Lego()
 coord = Coordinator()
 player = Player()
-
 
 # ----- LOOP ----- #
 
@@ -289,9 +307,16 @@ while True:
     cv2.imshow('frame', frame)
 
     # Wait for a key press and check if it's the 'q' key
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    key = cv2.waitKey(1)
+    if key == 27 or key == 113: # esc or q
         player.stop_timer()
         break
+    elif key == 32: # space
+        player.on_pause()
+    elif key == 13: # enter
+        coord.has_started = True
+        # print(key)
+
 
 # Release the video capture object and close all windows
 cap.release()
