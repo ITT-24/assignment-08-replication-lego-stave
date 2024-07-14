@@ -3,10 +3,21 @@ import cv2
 import numpy as np
 import cv2.aruco as aruco
 import sys
+import math
+from sound_generation import Note, Instrument, SoundGenerator
 
 NOTE_DURATION_IN_SEC = 1
+STARTING_NOTE = -9 # C4, a.k.a 9 semitones below reference note A4
+REFERENCE_FREQUENCY = 440 # in Hz. Frequency of A4.
+SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
+ID_TO_INSTRUMENT = {
+    0: Instrument.SINE,
+    1: Instrument.PULSE,
+    2: Instrument.SAW,
+    3: Instrument.NOISE
+}
 
 # INIT VIDEO FEED
 cam_id = 0
@@ -98,6 +109,7 @@ class Coordinator:
         self.rows = 0
         self.cols = 0
         self.centers = []
+        self.ids = []
         self.has_started = False
 
     # ?? do perspective projection?
@@ -187,6 +199,7 @@ class Player:
         self.start = False
         self.is_paused = True
         self.timer = None
+        self.active_cells = []
         pass
 
     def draw_timeline(self, frame):
@@ -214,19 +227,36 @@ class Player:
         """Checks the current column for markers.
            Do this every frame, or only once per timer call
         """
-    
-        for center in coord.centers:
+        self.active_cells = []
+        for i, center in enumerate(coord.centers):
             x, y = center
 
             cell_min = lego.width_px * self.column
             cell_max = cell_min + lego.width_px
-
+            
             # check if there is a marker center that aligns with column the timeline is currently at
             if x >= cell_min and x <= cell_max:
                 cell = coord.get_cell_of_marker_center(center)
+                id = coord.ids[i]
                 print("marker @", f"row:{cell.row}, col:{cell.col}")
+                self.active_cells.append((id, cell))
+                newSoundEvent.clear()
+                newSoundEvent.set()
+        
+        # TODO: Advanced stuff, like merging notes, etc
         
         self.advance_timeline() # comment if check every frame
+    
+    def position_to_note(self,cell, id):
+        y_index = cell.col
+        print(f"position: {y_index}")
+        frequency = REFERENCE_FREQUENCY * math.pow(math.pow(2, 1/12),(y_index + STARTING_NOTE)) # frequency according to equal temperament, en.wikipedia.org/wiki/Equal_temperament#Calculating_absolute_frequencies
+        print(f"frequency:{frequency}")
+        instrument = ID_TO_INSTRUMENT[id]
+        length = NOTE_DURATION_IN_SEC
+        volume = 1.0
+        return Note(length, frequency, instrument, volume)
+
 
     def advance_timeline(self):
         """Gets called by a repeating threaded timer to advance the timeline (see: Looper-Class)"""
@@ -274,11 +304,30 @@ class Cell:
 lego = Lego()
 coord = Coordinator()
 player = Player()
+synth = SoundGenerator(SAMPLING_RATE)
+newSoundEvent = threading.Event()
 
 # ----- LOOP ----- #
 
 cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
 
+def synth_thread():
+        
+    synth.start_stream()
+
+    while True:
+        if end_synth_thread_flag:
+            break
+        newSoundEvent.wait()
+        notes = []
+        for id, cell in player.active_cells:
+            notes.append(player.position_to_note(cell,id[0]))
+        synth.play_simultaneous_notes(notes)
+        player.active_cells = []
+
+end_synth_thread_flag = False
+synth_thread = threading.Thread(target=synth_thread)
+synth_thread.start()
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
@@ -298,6 +347,7 @@ while True:
         # aruco.drawDetectedMarkers(frame, corners, ids)
         lego.set_lego_size(corners, frame) 
         coord.get_marker_center(corners, frame)
+        coord.ids = ids
         coord.draw_collision(frame)
 
     coord.draw_grid(frame)
@@ -320,6 +370,8 @@ while True:
 
 # Release the video capture object and close all windows
 cap.release()
+synth.end_stream()
+end_synth_thread_flag = True
 cv2.destroyAllWindows()
 
 
