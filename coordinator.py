@@ -6,17 +6,31 @@ import sys
 import math
 from sound_generation import Note, Instrument, SoundGenerator
 
-NOTE_DURATION_IN_SEC = 1
-STARTING_NOTE = -9 # C4, a.k.a 9 semitones below reference note A4
-REFERENCE_FREQUENCY = 440 # in Hz. Frequency of A4.
+NOTE_DURATION_IN_SEC = 0.5
+REFERENCE_NOTE = 69 # aka C4
 SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
-    0: Instrument.SINE,
-    1: Instrument.PULSE,
-    2: Instrument.SAW,
-    3: Instrument.NOISE
+    0: Instrument.PIANO,
+    1: Instrument.SAX,
+    2: Instrument.HAMMOND,
+    3: Instrument.BASS
+}
+
+MIDI_INDEX_TO_NOTE = {
+    0:"C",
+    1:"C#",
+    2:"D",
+    3:"D#",
+    4:"E",
+    5:"F",
+    6:"F#",
+    7:"G",
+    8:"G#",
+    9:"A",
+    10:"A#",
+    11:"B"
 }
 
 # INIT VIDEO FEED
@@ -140,7 +154,9 @@ class Coordinator:
         for y in range (0, h, cell_height):
             y = int(y)
             cv2.line(frame, (0, y), (w, y), color=GRID_COLOR, thickness=1)
-            cv2.putText(frame, str(grid_y_idx), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
+            note_name  = MIDI_INDEX_TO_NOTE[(REFERENCE_NOTE + grid_y_idx) % 12]
+            octave = math.floor((REFERENCE_NOTE + grid_y_idx) / 12) - 2
+            cv2.putText(frame, note_name + str(octave), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
             grid_y_idx += 1
 
         self.rows = rows
@@ -243,6 +259,12 @@ class Player:
                 newSoundEvent.clear()
                 newSoundEvent.set()
         
+        notes = []
+        for id, cell in self.active_cells:
+            notes.append(self.position_to_note(cell,id[0]))
+        player.active_cells = []
+        synth.play_simultaneous_notes(notes)
+        
         # TODO: Advanced stuff, like merging notes, etc
         
         self.advance_timeline() # comment if check every frame
@@ -250,12 +272,11 @@ class Player:
     def position_to_note(self,cell, id):
         y_index = cell.col
         print(f"position: {y_index}")
-        frequency = REFERENCE_FREQUENCY * math.pow(math.pow(2, 1/12),(y_index + STARTING_NOTE)) # frequency according to equal temperament, en.wikipedia.org/wiki/Equal_temperament#Calculating_absolute_frequencies
-        print(f"frequency:{frequency}")
+        note = REFERENCE_NOTE + y_index
         instrument = ID_TO_INSTRUMENT[id]
         length = NOTE_DURATION_IN_SEC
-        volume = 1.0
-        return Note(length, frequency, instrument, volume)
+        volume = 80
+        return Note(length, note, instrument, volume)
 
 
     def advance_timeline(self):
@@ -271,7 +292,8 @@ class Player:
         self.is_paused = False
 
     def stop_timer(self):
-        self.timer.cancel()
+        if self.timer:
+            self.timer.cancel()
 
     def on_pause(self):
         if self.timer == None:
@@ -312,18 +334,11 @@ newSoundEvent = threading.Event()
 cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
 
 def synth_thread():
-        
-    synth.start_stream()
 
     while True:
         if end_synth_thread_flag:
             break
         newSoundEvent.wait()
-        notes = []
-        for id, cell in player.active_cells:
-            notes.append(player.position_to_note(cell,id[0]))
-        synth.play_simultaneous_notes(notes)
-        player.active_cells = []
 
 end_synth_thread_flag = False
 synth_thread = threading.Thread(target=synth_thread)
@@ -370,7 +385,6 @@ while True:
 
 # Release the video capture object and close all windows
 cap.release()
-synth.end_stream()
 end_synth_thread_flag = True
 cv2.destroyAllWindows()
 

@@ -9,12 +9,16 @@ import os
 import collections
 import time
 import threading
+import mido
 
 class Instrument(Enum):
-    SINE = 0
-    PULSE = 1
-    SAW = 2
-    NOISE = 3
+    PIANO = 0
+    BASS = 25
+    HAMMOND = 16
+    SAX = 64
+    BASS_DRUM = 936
+    SNARE = 938
+
 
 class Note():
     # length: duration of the tone (in seconds)
@@ -23,17 +27,14 @@ class Note():
     # pulse: pulsewidth of the signal (only applies to pulse waves.)
     # sawwidth: width of the rising portion of the triangular wave form in proportion of one cycle. 0.0 produces a sawtooth wave, 0.5 produces a symmetrical triangle wave, 1.0 a sawtooth wave (but flipped). Only for sawtooth waves.
     
-    def __init__(self, length:float, frequency:float, instrument:Instrument, volume:float,  pulse=0.5, sawwidth=0.5):
+    def __init__(self, length:float, note:int, instrument:Instrument, volume:int):
         self.length = length
-        self.frequency = frequency
+        self.note = note
         self.instrument = instrument
         self.volume = volume
-        self.pulse = pulse
-        self.sawwidth = sawwidth
-
 
 SAMPLING_RATE = 11400
-CHUNK_SIZE = 4096
+CHUNK_SIZE = 512
 NUM_TRACKS = 10 # number of sounds that can be played in parallel
 py_audio = pyaudio.PyAudio()
 
@@ -41,66 +42,44 @@ class SoundGenerator():
 
     def __init__(self,sampling_rate):
 
-        self.sampling_rate = sampling_rate
-
-        self.noise_rng = np.random.default_rng()
-        self.stream: pyaudio.Stream|None = None
         
-        self.tracks = np.ndarray((NUM_TRACKS, 1), dtype=np.float32)
-        self.feed_stream_thread = threading.Thread(target=self.feed_stream)
-        self.now = 0
 
-    def start_stream(self):        
-        self.stream = py_audio.open(rate=SAMPLING_RATE,format=pyaudio.paFloat32, channels=1, output=True, stream_callback=self.feed_stream)
-        self.active = True
-        #self.feed_stream_thread.start()
+        self.out_port = mido.open_output()
+        
 
-    def end_stream(self):
-        self.active = False
-        self.stream.stop_stream()
-        self.stream.close()
-        py_audio.terminate()
-
-    """
-    continuously reads samples from the multiple tracks, merges them, and writes them to the stream.
-    """
-    def feed_stream(self, in_data, frame_count, time_info, status):
-        if self.tracks.shape[1] < self.now + frame_count:
-            self.tracks = np.pad(self.tracks, [(0,0),(0,frame_count)])
-        chunk = np.mean(self.tracks[:, self.now : self.now + frame_count], axis=0).tobytes()
-        self.now += frame_count
-        return chunk, pyaudio.paContinue
-
-
-    # with the given parameters, creates a 32-bit float signal in byte form.
-    def generate_tone(self, note):
-        print(f"freq{note.frequency}")
-        if not note.instrument in Instrument:
-            print(f"No, Patrick, {note.instrument} is not an instrument!")
-            return
-        waveform = np.array([])
-        t = np.arange(note.length * SAMPLING_RATE)
-        if note.instrument == Instrument.SINE:
-            waveform = np.sin(np.pi * 2 * (note.frequency/self.sampling_rate) * t)
-            #NUM_QUANTISATION_STEPS = 512
-            #quantisation_steps = np.linspace(-volume, volume, NUM_QUANTISATION_STEPS)
-            #quant_inds = np.digitize(waveform, quantisation_steps)
-            #waveform = quantisation_steps[quant_inds]
-
-        elif note.instrument == Instrument.SAW:
-            waveform = sawtooth(np.pi * 2 * (note.frequency/SAMPLING_RATE) * t, width=note.sawwidth)
-        elif note.instrument == Instrument.PULSE:
-            waveform = square(np.pi * 2 * (note.frequency/SAMPLING_RATE) * t, duty=note.pulse)
-        elif note.instrument == Instrument.NOISE:
-            waveform = np.random.normal(note.frequency, note.volume, note.length*SAMPLING_RATE)
-            waveform = waveform / waveform.max()
-        #waveform = waveform * volume
-
-        return waveform.astype(np.float32)
-    
     def play_simultaneous_notes(self,notes:(list|np.ndarray)):
         if len(notes) <= 0:
             return
+        
+        for i, note in enumerate(notes):
+            length = note.length
+            note_height = note.note
+            volume = note.volume
+            instrument = note.instrument
+            if instrument in [Instrument.PIANO, Instrument.BASS, Instrument.HAMMOND, Instrument.SAX]:
+                self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))
+                inst = mido.Message('program_change', program=instrument.value)
+                self.out_port.send(inst)
+                print(length)
+                msg = mido.Message('note_on', note=note_height, velocity=volume, time=length)
+                self.out_port.send(msg)
+                t = threading.Timer(length+ i *0.0001, lambda: self.end_note(note_height, volume))
+                t.start()
+            elif instrument in [Instrument.BASS_DRUM, Instrument.SNARE]:
+                
+                inst = mido.Message('program_change', program=instrument.value-900)
+                self.out_port.send(inst)
+                msg = mido.Message('note_on', note=note_height, time=length, channel=9)
+                self.out_port.send(msg)
+                
+    
+    def end_note (self, note_height, velocity):
+        msg = mido.Message('note_off', note=note_height, velocity=0)
+        self.out_port.send(msg)
+        print(f"Message sent {msg}")
+        return
+
+        
         waves = []
         length_samples = []
         for note in notes:
@@ -112,7 +91,7 @@ class SoundGenerator():
         print(sample_length)
         print(self.tracks.shape)
         now = self.now # save before padding to prevent race conditions
-        self.tracks = np.pad(self.tracks, [(0,0),(0,sample_length)])
+        self.tracks = np.pad(self.tracks, [(0,0),(0,3*sample_length)])
         print(self.tracks.shape)
         print(now)
         #waves = np.apply_along_axis(lambda arr:arr.resize(sample_length), 0, np.array(waves)) # extends length of all arrays to match length of the longest note
