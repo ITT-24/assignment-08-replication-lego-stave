@@ -6,16 +6,21 @@ import sys
 import math
 from sound_generation import Note, Instrument, SoundGenerator
 
+DEBUG = False # set to true, to see grid -> otherwise wont draw for better performance
+
 NOTE_DURATION_IN_SEC = 0.5
+
 REFERENCE_NOTE = 69 # aka C4
 SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
-    0: Instrument.PIANO,
-    1: Instrument.SAX,
-    2: Instrument.HAMMOND,
-    3: Instrument.BASS
+    0: Instrument.PIANO, # red
+    # 1: Instrument.SAX,
+    1: Instrument.SNARE, # green
+    2: Instrument.HAMMOND, # blue
+    # 2: Instrument.BASS_DRUM,
+    3: Instrument.BASS, # yellow
 }
 
 MIDI_INDEX_TO_NOTE = {
@@ -45,19 +50,19 @@ aruco_params = aruco.DetectorParameters()
 detector_border = aruco.ArucoDetector(aruco_dict_border,aruco_params)
 detector_notes = aruco.ArucoDetector(aruco_dict_notes, aruco_params)
 
-# TODO: use angle of surface to create perspectively transformed grid
-# ??: instead of padding cells, crop the frame?
 
 # ----- Helper classes ----- #
 
 class Lego:
     """A representation of a lego duplo piece standing on it's side. So smooth sides up."""
     def __init__(self):
-        self.width_mm = 18 # actually 18 (but adds some leniency)
-        self.height_mm = 31 # actually 31 (but adds some leniency)
+        padding_w = 2 # padding added to the physical playfield-grid
+        padding_h = 1
+        self.width_mm = 18 + padding_w  
+        self.height_mm = 31 + padding_h 
         self.marker_mm = 16
         self.marker_size = 0
-        self.padding = 20 
+        self.padding = 0 # add padding if you want -> best if it corresponds to the physical playfield (if used)
 
     def set_lego_size(self, corners, frame):
         """Measure the rough size of the lego pieces in pixels in the frame. Uses the first detected lego"""
@@ -79,41 +84,35 @@ class Lego:
 
         frame_h, frame_w, _ = frame.shape
 
-        # get initial size
-        width_px = int(self.width_mm * mm_in_px)
-        height_px = int(self.height_mm * mm_in_px)
-        
-        # add dynamic padding to make the cells fit the frame better (works (with, but has some rounding errors))
-        # so: |[lego+padding][l+p][l+p][l+p]| not |[l+p][l+p][l+p][|
+        # get initial size for dynamic padding
+        # width_px = int(self.width_mm * mm_in_px)
+        # height_px = int(self.height_mm * mm_in_px)
+        # self.add_dynamic_padding(frame_w, width_px, frame_h, height_px)
+
+        # static padding
+        self.width_px = int( self.width_mm * mm_in_px )
+        self.height_px = int( self.height_mm * mm_in_px )
+
+        # print(f"lego == {self.width_px} x {self.height_px}")
+
+    def add_dynamic_padding(self, frame_w, width_px, frame_h, height_px):
+        """adds dynamic padding to make the cells fit the frame better (works (with, but has some rounding errors))
+           so: |[lego+padding][l+p][l+p][l+p]| not |[l+p][l+p][l+p][|
+        """
+
         padding_w = 0
         if frame_w % width_px != 0: # set a padding to fill the width of the frame
             cells_w = int(frame_w / width_px )
             diff_w = frame_w - (width_px * cells_w)
             padding_w = int(diff_w / width_px)
-            print("w", cells_w * int( width_px + padding_w), "==", frame_w )
-
         padding_h = 0
         if frame_h % height_px != 0:
             cells_h = int(frame_h / height_px)
-            print("cells", cells_h)
             diff_h = frame_h - (height_px * cells_h)
-            print("diff", diff_h)
             padding_h = int(diff_h / cells_h)
-            print("padding", padding_h)
-            print("h", cells_h * ( height_px + padding_h), "==", frame_h )
-
         # rounding for cv2 functions
         self.width_px = int( width_px + padding_w )
         self.height_px = int( height_px + padding_h )
-
-        # uncomment to do static padding
-        # self.width_px = int( (self.width_mm * mm_in_px) + self.padding)
-        # self.height_px = int ( (self.height_mm * mm_in_px) + self.padding)
-
-        # # resize to fit grid?
-        # #  frame = cv2.resize(frame, ( (self.width_px) * steps,  (self.height_px) * steps_h ))
-
-        print(f"lego == {self.width_px} x {self.height_px}")
 
 
 class Coordinator:
@@ -126,7 +125,6 @@ class Coordinator:
         self.ids = []
         self.has_started = False
 
-    # ?? do perspective projection?
     def draw_grid(self, frame):
         """see: https://stackoverflow.com/a/37705365"""
         
@@ -139,25 +137,26 @@ class Coordinator:
         h, w, _ = frame.shape
         rows, cols = (h//lego.height_px, w//lego.width_px)
 
-        grid_x_idx = 0
-        grid_y_idx = 0
+        if DEBUG:
+            grid_x_idx = 0
+            grid_y_idx = 0
 
-        cell_width = lego.width_px
-        cell_height = lego.height_px
+            cell_width = lego.width_px
+            cell_height = lego.height_px
 
-        for x in range (0, w, cell_width):
-            x = int(x)
-            cv2.line(frame, (x, 0), (x, h), color=GRID_COLOR, thickness=1)
-            cv2.putText(frame, str(grid_x_idx), (x, h), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
-            grid_x_idx += 1
+            for x in range (0, w, cell_width):
+                x = int(x)
+                cv2.line(frame, (x, 0), (x, h), color=GRID_COLOR, thickness=1)
+                cv2.putText(frame, str(grid_x_idx), (x, h), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
+                grid_x_idx += 1
 
-        for y in range (0, h, cell_height):
-            y = int(y)
-            cv2.line(frame, (0, y), (w, y), color=GRID_COLOR, thickness=1)
-            note_name  = MIDI_INDEX_TO_NOTE[(REFERENCE_NOTE + grid_y_idx) % 12]
-            octave = math.floor((REFERENCE_NOTE + grid_y_idx) / 12) - 2
-            cv2.putText(frame, note_name + str(octave), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
-            grid_y_idx += 1
+            for y in range (0, h, cell_height):
+                y = int(y)
+                cv2.line(frame, (0, y), (w, y), color=GRID_COLOR, thickness=1)
+                note_name  = MIDI_INDEX_TO_NOTE[(REFERENCE_NOTE + grid_y_idx) % 12]
+                octave = math.floor((REFERENCE_NOTE + grid_y_idx) / 12) - 2
+                cv2.putText(frame, note_name + str(octave), (0, y+12), cv2.FONT_HERSHEY_PLAIN, 1, GRID_COLOR)
+                grid_y_idx += 1
 
         self.rows = rows
         self.cols = cols
@@ -179,9 +178,6 @@ class Coordinator:
 
             self.centers.append((x_centerPixel, y_centerPixel)) # save centers
         
-        # print("c's", len(self.centers))
-        # TODO: ? only re-save the centers, if the markers have moved significantly (for performance)
-
 
     def draw_collision(self, frame):
         """Show the cell the marker is currently colliding with"""
@@ -230,14 +226,14 @@ class Player:
         h, w, _ = frame.shape
 
         if self.x >= w: # reset the timeline and loop the player
-            print("out of frame", self.x, w)
+            # print("out of frame", self.x, w)
             self.x = 0 # reset
             self.column = 0
 
         cv2.line(frame, (self.x, 0), (self.x, h), color=self.color, thickness=2)
 
         # uncomment if check every frame
-        # self.play_cells() # check often    
+        # self.play_cells() # checks often    
 
     def play_cells(self):
         """Checks the current column for markers.
@@ -253,7 +249,12 @@ class Player:
             # check if there is a marker center that aligns with column the timeline is currently at
             if x >= cell_min and x <= cell_max:
                 cell = coord.get_cell_of_marker_center(center)
-                id = coord.ids[i]
+
+                try:
+                    id = coord.ids[i] # IndexError: index 2 is out of bounds for axis 0 with size 2
+                except IndexError: 
+                    return 
+                
                 print("marker @", f"row:{cell.row}, col:{cell.col}")
                 self.active_cells.append((id, cell))
                 newSoundEvent.clear()
@@ -264,14 +265,12 @@ class Player:
             notes.append(self.position_to_note(cell,id[0]))
         player.active_cells = []
         synth.play_simultaneous_notes(notes)
-        
-        # TODO: Advanced stuff, like merging notes, etc
-        
+                
         self.advance_timeline() # comment if check every frame
     
     def position_to_note(self,cell, id):
         y_index = cell.col
-        print(f"position: {y_index}")
+        # print(f"position: {y_index}")
         note = REFERENCE_NOTE + y_index
         instrument = ID_TO_INSTRUMENT[id]
         length = NOTE_DURATION_IN_SEC
@@ -380,30 +379,9 @@ while True:
         player.on_pause()
     elif key == 13: # enter
         coord.has_started = True
-        # print(key)
 
 
 # Release the video capture object and close all windows
 cap.release()
 end_synth_thread_flag = True
 cv2.destroyAllWindows()
-
-
-"""
-# min bounding rect
-
-        # idx_min = np.argmin(np.sum(corners, axis=1))
-        # min_pos = corners[idx_min]
-
-        # x = int(min_pos[0])
-        # y = int(min_pos[1])
-
-        # rect = cv2.minAreaRect(corners)
-        # (x2, y2), (width, height), angle = rect
-        # width = int(width)
-        # height = int(height)
-
-        # print("min", width, height)
-
-        # cv2.rectangle(frame,(x,y),(x+width,y+height),(0,255,255),2)
-"""

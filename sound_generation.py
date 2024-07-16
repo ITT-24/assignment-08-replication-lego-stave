@@ -1,15 +1,15 @@
 import numpy as np
-import pyaudio
-from scipy.signal import sawtooth, square
-from enum import Enum
-import seaborn as sns
-import matplotlib.pyplot as plt
-from pynput import keyboard
-import os
-import collections
-import time
 import threading
 import mido
+from enum import Enum
+# import pyaudio
+# from scipy.signal import sawtooth, square
+# import seaborn as sns
+# import matplotlib.pyplot as plt
+# from pynput import keyboard
+# import os
+# import collectionspy
+# import time
 
 class Instrument(Enum):
     PIANO = 0
@@ -18,6 +18,7 @@ class Instrument(Enum):
     SAX = 64
     BASS_DRUM = 936
     SNARE = 938
+# see for example here: https://jythonmusic.me/api/midi-constants/instrument/
 
 
 class Note():
@@ -36,16 +37,12 @@ class Note():
 SAMPLING_RATE = 11400
 CHUNK_SIZE = 512
 NUM_TRACKS = 10 # number of sounds that can be played in parallel
-py_audio = pyaudio.PyAudio()
+# py_audio = pyaudio.PyAudio()
 
 class SoundGenerator():
 
     def __init__(self,sampling_rate):
-
-        
-
         self.out_port = mido.open_output()
-        
 
     def play_simultaneous_notes(self,notes:(list|np.ndarray)):
         if len(notes) <= 0:
@@ -57,16 +54,17 @@ class SoundGenerator():
             volume = note.volume
             instrument = note.instrument
             if instrument in [Instrument.PIANO, Instrument.BASS, Instrument.HAMMOND, Instrument.SAX]:
+                # Hammond and Sax doesn't turn a note off, when its two notes at the same time
                 self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))
                 inst = mido.Message('program_change', program=instrument.value)
                 self.out_port.send(inst)
-                print(length)
+                print(length, i)
                 msg = mido.Message('note_on', note=note_height, velocity=volume, time=length)
                 self.out_port.send(msg)
                 t = threading.Timer(length+ i *0.0001, lambda: self.end_note(note_height, volume))
                 t.start()
+
             elif instrument in [Instrument.BASS_DRUM, Instrument.SNARE]:
-                
                 inst = mido.Message('program_change', program=instrument.value-900)
                 self.out_port.send(inst)
                 msg = mido.Message('note_on', note=note_height, time=length, channel=9)
