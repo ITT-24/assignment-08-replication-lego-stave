@@ -28,7 +28,7 @@ Document decision process, implementation, and usage of your prototype
   - explanation of the found papers
   - brainstorming on how it could be implemented and what materials it uses
   - narrowing it down with using similar constraints as above
-  - 
+  
 #### 2. Decision
 Reasons for the decision where:
 - the original paper (audio-d touch) had an interesting concept, that is still very extendable (and gives room for creativity)
@@ -55,21 +55,19 @@ Reasons for the decision where:
   - y-axis = pitch
   - if the middle of a marker is inside a cell it maps that cell and it's position to a note
   - ![](/img/design-idea.png)
-- degrees of freedom are time, pitch, instrument
 
 ### Problems
 - the marker detection is dependent on the markers being big enough
   - decision on using duplo blocks instead of normal ones
   - camera needs to be close enough, which does limit the length of the track
-  - TODO: comparison picture
 - the detection is dependent on the markers having a white border (which does reduce the size of the marker a little bit)
   - we did a short test without the border, which showed that the marker where not detected reliably
   - interestingly enough if the color of the lego bricks was light enough (i.e. yellow or brighter) the color of the blocks was enough of a border to detect the markers (most of the time).
   - ![](/img/duplo_border(less).png)
 
+
 ### How it works
 #### Detection
-- [ ] TODO: see [positionserkennung](#positionserkennung) 
 - creates a grid across the frame as a reference point of where the markers are placed
   - the grids dimensions are based on the LEGO pieces and their known dimensions
   - press <kbd>enter</kbd> when you are ready to start
@@ -83,42 +81,32 @@ Reasons for the decision where:
 ![](/img/lego-dimensions.png)
 
 #### Music
-- [ ] TODO
+  - y-axis = pitch
+  - markerID = instrument (aka wave type)
+- Problems with **pyAudio**:
+  - attempting to create a new mini synthesizer to get a bigger variety in sounds and instruments
+  - opens an audio stream when the script is started
+  - uses a thread, that listens to an event to play the sounds
+  - event gets triggered, when a marker gets detected and generates the sound appropriate to its position
+  - uses the the marker and it's position to generate a sound
+  - issues with playing sound at the right time and the right length
+  - sound had a delay that would cause the next sound to delay as well, leading to "output underflow"
+  - caused unreliable sound output
+- Change to using **mido** with rtmidi-backend
 
 # Usage
-- [ ] TODO: explanation
+- blocks are made by sticking AruCo-Markers onto LEGO duplo bricks
+  - 16mm Markers with 1mm white border on each side + IDs 0, 1, 2, 3 
+  - alternatively: works with just the markers as well
+- set up a camera above a desk (alternatively you could use your laptops webcam and hold the blocks up to the camera)
+- start the script: `py coordinator.py`
+  - the camera is set to `0`, to use a different camera do: `py coordinator.py 1` 
+- press <kbd>enter</kbd> to start the script
+- arrange the LEGO blocks as you like
+- press <kbd>space</kbd> to pause/play
+- press <kbd>esc</kbd> or <kbd>q</kbd> to quit the application
+ 
 - [ ] TODO: video
-
-
----
-
-### Notes
-#### Setup
-- Kamera ca. halber Meter über Tisch
-
-#### Positionserkennung
-- 12 Lego duplo Steine passen in Kamera-frame (Höhe)
-- 26 Lego duplo Steine passen in Kamera-frame (Breite)
-- Koordinaten normalisieren
-- Mittelpunkt von Legosteinen erkennen
-- Kamera in 12(h)x16(w) Grid einteilen 
-  - Stein-Mittelpunkt am nächsten an Zell-Mittelpunkt/ in Zelle drin = Pitch + Zeit
-
-
-`coordinator.py` has the initial implementation:
-- cam id is default set to 0, to change it call `py coordinator.py 1` or similar
-- creates a grid with cells that mimic the size of the lego pieces
-  - uses known size of aruco markers + known size of lego pieces to parse them from millimeters to pixels
-  - grid currently without perspective transform and doesn't fill the frame perfectly, but responds to different marker sizes (i.e. distances of the marker to the camera)
-  - grid gets creates, when the first marker gets detected. This also starts the main loop of the application.
-- The loop:
-  - a threaded timer advances the timeline (i.e. what colum of cells get played)
-  - every frame the application draws the timeline 
-  - the timeline advances per column
-  - prints the cell (row, column) with a detected marker
-- Checking the cells
-  - check every frame (this can get repeats)
-  - check when timeline advances (this is more robust, but doesn't respond to changes as well)
 
 ---
 ### Sources
