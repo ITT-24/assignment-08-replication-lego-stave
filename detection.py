@@ -82,6 +82,7 @@ class Playfield():
 playfield = Playfield()
 
 cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
+cap.set(cv2.CAP_PROP_AUTOFOCUS, 0) # turn the autofocus off
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
