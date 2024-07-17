@@ -16,7 +16,7 @@ SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
-    0: Instrument.PIANO, # red
+    0: Instrument.SAX, # red
     1: Instrument.DULCIMER, # green
     2: Instrument.STRINGS, # blue
     3: Instrument.DRUM, # yellow
@@ -254,7 +254,7 @@ class Player:
                 except IndexError: 
                     return 
                 
-                print("marker @", f"row:{cell.row}, col:{cell.col}")
+                #print("marker @", f"row:{cell.row}, col:{cell.col}")
                 self.active_cells.append((id, cell))
                 newSoundEvent.clear()
                 newSoundEvent.set()

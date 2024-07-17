@@ -18,6 +18,7 @@ class Instrument(Enum):
     STRINGS =  45 
     BASS_DRUM = 939 
     SNARE = 938 
+    SAX = 64
 # see for example here: https://www.ccarh.org/courses/253/handout/gminstruments/
 
 class Note():
@@ -46,21 +47,20 @@ class SoundGenerator():
     def play_simultaneous_notes(self,notes:(list|np.ndarray)):
         if len(notes) <= 0:
             return
-        
         for i, note in enumerate(notes):
             length = note.length
             note_height = note.note
             volume = note.volume
             instrument = note.instrument
-            if instrument in [Instrument.PIANO, Instrument.DRUM, Instrument.DULCIMER, Instrument.STRINGS]:
+            if instrument in [Instrument.PIANO, Instrument.DRUM, Instrument.DULCIMER, Instrument.STRINGS, Instrument.SAX]:
                 # Hammond and Sax doesn't turn a note off, when its two notes at the same time
                 self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))
                 inst = mido.Message('program_change', program=instrument.value)
                 self.out_port.send(inst)
-                print(length, i)
                 msg = mido.Message('note_on', note=note_height, velocity=volume, time=length)
                 self.out_port.send(msg)
-                t = threading.Timer(length+ i *0.0001, lambda: self.end_note(note_height, volume))
+
+                t = threading.Timer(length+ i *0.0001, lambda note_height=note_height: self.end_note(note_height, volume, instrument.value))
                 t.start()
 
             elif instrument in [Instrument.BASS_DRUM, Instrument.SNARE]:
@@ -70,39 +70,15 @@ class SoundGenerator():
                 self.out_port.send(msg)
                 
     
-    def end_note (self, note_height, velocity):
+    def end_note (self, note_height, velocity, program=None, timer=None):
+        if not program is None:
+            inst = mido.Message('program_change', program=program)
+            self.out_port.send(inst)
+            
         msg = mido.Message('note_off', note=note_height, velocity=0)
         self.out_port.send(msg)
-        print(f"Message sent {msg}")
         return
 
-        
-        waves = []
-        length_samples = []
-        for note in notes:
-            wave = self.generate_tone(note)
-            waves.append(wave)
-            length_samples.append(wave.shape[0])
-        print(length_samples)
-        sample_length = max(length_samples)
-        print(sample_length)
-        print(self.tracks.shape)
-        now = self.now # save before padding to prevent race conditions
-        self.tracks = np.pad(self.tracks, [(0,0),(0,3*sample_length)])
-        print(self.tracks.shape)
-        print(now)
-        #waves = np.apply_along_axis(lambda arr:arr.resize(sample_length), 0, np.array(waves)) # extends length of all arrays to match length of the longest note
-        #combined_wave = np.sum(waves, axis=0)
-        #combined_wave = combined_wave / np.max(combined_wave)
-        print("len waves",len(waves))
-        for wave in waves:
-            print("waveloop")
-            for i in range(NUM_TRACKS):
-                print("found one!")
-                if self.tracks[i][now] == 0:
-                    print(self.tracks[i].shape)
-                    self.tracks[i][now:now + wave.shape[0]] = wave
-                    break
 
 
             
