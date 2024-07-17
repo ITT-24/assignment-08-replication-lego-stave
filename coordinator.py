@@ -45,6 +45,18 @@ if len(sys.argv) > 1:
 if len(sys.argv) > 2:
     if sys.argv[2] in ["-f", "-F", "-flip", "flip"]:
         flip_image = True
+    else:
+        bpm = float(sys.argv[2])
+        NOTE_DURATION_IN_SEC = 60 / bpm
+if len(sys.argv) > 3:
+    if flip_image:
+        bpm = float(sys.argv[3])
+        NOTE_DURATION_IN_SEC = 60 / bpm
+    else:
+        REFERENCE_NOTE = int(sys.argv[3])
+if len(sys.argv) > 4 and flip_image:
+    REFERENCE_NOTE = int(sys.argv[4])
+
     
 
 aruco_dict_border = aruco.getPredefinedDictionary(aruco.DICT_6X6_100)
