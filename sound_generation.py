@@ -26,7 +26,9 @@ class Instrument(Enum):
     BASS_DRUM = 939 
     SNARE = 938 
     SAX = 64
+    WOODBLOCK = 115
 # see for example here: https://www.ccarh.org/courses/253/handout/gminstruments/
+#              or here: https://www.recordingblogs.com/wiki/midi-program-change-message
 
 class Note():
     # length: duration of the tone (in seconds)
@@ -59,8 +61,13 @@ class SoundGenerator():
             note_height = note.note
             volume = note.volume
             instrument = note.instrument
-            if instrument in [Instrument.PIANO, Instrument.DRUM, Instrument.DULCIMER, Instrument.STRINGS, Instrument.SAX, Instrument.BASS, Instrument.HAMMOND, Instrument.SNARE, Instrument.SAW,Instrument.XYLO, Instrument.VIOLIN, Instrument.GOBLIN]:
-                # Hammond and Sax doesn't turn a note off, when its two notes at the same time
+            
+            if instrument in [Instrument.BASS_DRUM, Instrument.SNARE]:
+                inst = mido.Message('program_change', program=instrument.value-900)
+                self.out_port.send(inst)
+                msg = mido.Message('note_on', note=note_height, time=length, channel=9)
+                self.out_port.send(msg)
+            else:
                 self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))
                 inst = mido.Message('program_change', program=instrument.value)
                 self.out_port.send(inst)
@@ -70,12 +77,6 @@ class SoundGenerator():
                 t = threading.Timer(length+ i *0.0001, lambda note_height=note_height: self.end_note(note_height, volume, instrument.value))
                 t.start()
 
-            elif instrument in [Instrument.BASS_DRUM, Instrument.SNARE]:
-                inst = mido.Message('program_change', program=instrument.value-900)
-                self.out_port.send(inst)
-                msg = mido.Message('note_on', note=note_height, time=length, channel=9)
-                self.out_port.send(msg)
-                
     
     def end_note (self, note_height, velocity, program=None, timer=None):
         if not program is None:
