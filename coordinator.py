@@ -11,15 +11,15 @@ DEBUG = False # set to true, to see grid -> otherwise wont draw for better perfo
 NOTE_DURATION_IN_SEC = 0.5
 NOTE_VOLUME = 100
 
-REFERENCE_NOTE = 69 # aka C4
+REFERENCE_NOTE = 48 # aka
 SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
     0: Instrument.PIANO, # red
-    1: Instrument.DULCIMER, # green
-    2: Instrument.STRINGS, # blue
-    3: Instrument.DRUM, # yellow
+    1: Instrument.BASS, # green
+    2: Instrument.SAX, # blue
+    3: Instrument.WOODBLOCK, # yellow
 }
 
 MIDI_INDEX_TO_NOTE = {
@@ -342,6 +342,7 @@ newSoundEvent = threading.Event()
 # ----- LOOP ----- #
 
 cap = cv2.VideoCapture(cam_id, cv2.CAP_DSHOW)
+cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 
 def synth_thread():
 
