@@ -82,6 +82,7 @@ Reasons for the decision where:
 
 #### Music
   - y-axis = pitch
+  - x-axis = timing
   - markerID = midi instrument
 - First try with **pyAudio**:
   - attempting to create a new mini synthesizer to get a bigger variety in sounds and instruments
