@@ -100,9 +100,11 @@ Reasons for the decision where:
   - 16mm markers with 1mm white border on each side + IDs 0, 1, 2, 3 
   - alternatively: works with just the markers as well
 - set up a camera above a desk (alternatively you could use your laptops webcam and hold the blocks up to the camera)
-- start the script: `py coordinator.py`
-  - the camera is set to `0`, to use a different camera do: `py coordinator.py 1` 
-  - to switch the vertical direction of the grid do: `py coordinator.py 0 -f` (you need to specify your camera)
+- start the script: `py coordinator.py [CAMERA ID] [-f] [BPM] [REFERENCE NOTE]`
+  - CAMERA ID: Internal system ID of the camera used, by default set to `0`
+  - `-f`: Flips the image to align with your POV of the table. Can be left out.
+  - BPM: Beats per minute, determines playback speed and note length, per default set to 120
+  - REFERENCE NOTE: A note in midi format. Determines the lowest note you can play. Other playable notes are added in semitone intervals until outside the camera image.
 - press <kbd>enter</kbd> to start the music loop
 - arrange the LEGO blocks as you like (you can use the video-feed if you need help)
 - press <kbd>space</kbd> to pause/play
