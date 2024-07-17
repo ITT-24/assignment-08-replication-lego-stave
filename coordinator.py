@@ -16,7 +16,7 @@ SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
-    0: Instrument.SAX, # red
+    0: Instrument.PIANO, # red
     1: Instrument.DULCIMER, # green
     2: Instrument.STRINGS, # blue
     3: Instrument.DRUM, # yellow
@@ -37,10 +37,15 @@ MIDI_INDEX_TO_NOTE = {
     11:"B"
 }
 
+flip_image= False
 # INIT VIDEO FEED
 cam_id = 0
 if len(sys.argv) > 1:
     cam_id = int(sys.argv[1])
+if len(sys.argv) > 2:
+    if sys.argv[2] in ["-f", "-F", "-flip", "flip"]:
+        flip_image = True
+    
 
 aruco_dict_border = aruco.getPredefinedDictionary(aruco.DICT_6X6_100)
 aruco_dict_notes = aruco.getPredefinedDictionary(aruco.DICT_4X4_100)
@@ -186,11 +191,18 @@ class Coordinator:
             # get which cell the center is in
             cell = self.get_cell_of_marker_center(center)
 
-    def get_cell_of_marker_center(self, center):
+    def get_cell_of_marker_center(self, center, reversed_cols=False):
         """Detect which cell the marker is in, see: https://stackoverflow.com/a/37705365"""
+        
+        h, w, _ = frame.shape
+        rows, cols = (h//lego.height_px, w//lego.width_px)
+
         x, y = center
         row = int( x / lego.width_px )
         col = int( y / lego.height_px) 
+        if reversed_cols:
+            col = cols - col
+
         # print(f"row: {row} + col: {col}")
 
         x = row * lego.width_px
@@ -247,7 +259,7 @@ class Player:
             
             # check if there is a marker center that aligns with column the timeline is currently at
             if x >= cell_min and x <= cell_max:
-                cell = coord.get_cell_of_marker_center(center)
+                cell = coord.get_cell_of_marker_center(center, reversed_cols=True)
 
                 try:
                     id = coord.ids[i] # IndexError: index 2 is out of bounds for axis 0 with size 2
@@ -348,6 +360,8 @@ while True:
     if not ret:
         print("No frame")
         continue
+    if flip_image:
+        frame = cv2.flip(frame, -1)
 
     # Convert the frame to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

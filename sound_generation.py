@@ -16,6 +16,13 @@ class Instrument(Enum):
     DRUM = 116
     DULCIMER = 15
     STRINGS =  45 
+    BASS = 33
+    HAMMOND = 16
+    XYLO = 13
+    VIOLIN = 40
+    SQUARE = 80
+    SAW = 81
+    GOBLIN = 101
     BASS_DRUM = 939 
     SNARE = 938 
     SAX = 64
@@ -52,7 +59,7 @@ class SoundGenerator():
             note_height = note.note
             volume = note.volume
             instrument = note.instrument
-            if instrument in [Instrument.PIANO, Instrument.DRUM, Instrument.DULCIMER, Instrument.STRINGS, Instrument.SAX]:
+            if instrument in [Instrument.PIANO, Instrument.DRUM, Instrument.DULCIMER, Instrument.STRINGS, Instrument.SAX, Instrument.BASS, Instrument.HAMMOND, Instrument.SNARE, Instrument.SAW,Instrument.XYLO, Instrument.VIOLIN, Instrument.GOBLIN]:
                 # Hammond and Sax doesn't turn a note off, when its two notes at the same time
                 self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))
                 inst = mido.Message('program_change', program=instrument.value)
