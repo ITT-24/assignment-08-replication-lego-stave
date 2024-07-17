@@ -9,6 +9,7 @@ from sound_generation import Note, Instrument, SoundGenerator
 DEBUG = False # set to true, to see grid -> otherwise wont draw for better performance
 
 NOTE_DURATION_IN_SEC = 0.5
+NOTE_VOLUME = 100
 
 REFERENCE_NOTE = 69 # aka C4
 SAMPLING_RATE = 44100
@@ -16,11 +17,9 @@ GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
     0: Instrument.PIANO, # red
-    # 1: Instrument.SAX,
-    1: Instrument.SNARE, # green
-    2: Instrument.HAMMOND, # blue
-    # 2: Instrument.BASS_DRUM,
-    3: Instrument.BASS, # yellow
+    1: Instrument.DULCIMER, # green
+    2: Instrument.STRINGS, # blue
+    3: Instrument.DRUM, # yellow
 }
 
 MIDI_INDEX_TO_NOTE = {
@@ -274,7 +273,7 @@ class Player:
         note = REFERENCE_NOTE + y_index
         instrument = ID_TO_INSTRUMENT[id]
         length = NOTE_DURATION_IN_SEC
-        volume = 80
+        volume = NOTE_VOLUME # 80
         return Note(length, note, instrument, volume)
 
 

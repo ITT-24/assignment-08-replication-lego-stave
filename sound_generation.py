@@ -13,13 +13,12 @@ from enum import Enum
 
 class Instrument(Enum):
     PIANO = 0
-    BASS = 25
-    HAMMOND = 16
-    SAX = 64
-    BASS_DRUM = 936
-    SNARE = 938
-# see for example here: https://jythonmusic.me/api/midi-constants/instrument/
-
+    DRUM = 116
+    DULCIMER = 15
+    STRINGS =  45 
+    BASS_DRUM = 939 
+    SNARE = 938 
+# see for example here: https://www.ccarh.org/courses/253/handout/gminstruments/
 
 class Note():
     # length: duration of the tone (in seconds)
@@ -53,7 +52,7 @@ class SoundGenerator():
             note_height = note.note
             volume = note.volume
             instrument = note.instrument
-            if instrument in [Instrument.PIANO, Instrument.BASS, Instrument.HAMMOND, Instrument.SAX]:
+            if instrument in [Instrument.PIANO, Instrument.DRUM, Instrument.DULCIMER, Instrument.STRINGS]:
                 # Hammond and Sax doesn't turn a note off, when its two notes at the same time
                 self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))
                 inst = mido.Message('program_change', program=instrument.value)
