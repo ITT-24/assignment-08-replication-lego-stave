@@ -23,7 +23,7 @@ class Instrument(Enum):
     SQUARE = 80
     SAW = 81
     GOBLIN = 101
-    BASS_DRUM = 939 
+    BASS_DRUM = 936
     SNARE = 938 
     SAX = 64
     WOODBLOCK = 115
@@ -65,7 +65,7 @@ class SoundGenerator():
             if instrument in [Instrument.BASS_DRUM, Instrument.SNARE]:
                 inst = mido.Message('program_change', program=instrument.value-900)
                 self.out_port.send(inst)
-                msg = mido.Message('note_on', note=note_height, time=length, channel=9)
+                msg = mido.Message('note_on', note=instrument.value-900, time=length, channel=9)
                 self.out_port.send(msg)
             else:
                 self.out_port.send(mido.Message('note_off', note=note_height, velocity=volume))

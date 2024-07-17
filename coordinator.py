@@ -16,7 +16,7 @@ SAMPLING_RATE = 44100
 GRID_COLOR = (200, 200, 200)
 TIMELINE_COLOR = (0, 0, 0)
 ID_TO_INSTRUMENT = {
-    0: Instrument.PIANO, # red
+    0: Instrument.BASS_DRUM, # red
     1: Instrument.BASS, # green
     2: Instrument.SAX, # blue
     3: Instrument.WOODBLOCK, # yellow
